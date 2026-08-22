@@ -789,3 +789,37 @@ static int __init kallsyms_init(void)
 	return 0;
 }
 device_initcall(kallsyms_init);
+	off++;
+
+	/*
+	 * Skip the leading underscore for symbols on architectures where
+	 * symbols are prefixed with an underscore.
+	 */
+#ifdef CONFIG_HAVE_UNDERSCORE_SYMBOL_PREFIX
+	if (*data == '_') {
+		skipped_first = 1;
+		data++;
+	}
+#endif
+	tptr = kallsyms_token_table;
+	for (;;) {
+		unsigned short token = kallsyms_token_index[*data];
+		data++;
+		while (token >= 256) {
+			token = tptr[token - 256];
+			if (!token)
+				goto no_more;
+			if (token < 256)
+				break;
+		}
+		if (!token)
+			goto no_more;
+		if (result && (off - skipped_first < maxlen))
+			result[off - skipped_first - 1] = token;
+		off++;
+	}
+no_more:
+	if (result && maxlen)
+		result[min(off - skipped_first, maxlen - 1)] = '\0';
+	return off;
+}
