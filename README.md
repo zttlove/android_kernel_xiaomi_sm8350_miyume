@@ -1,6 +1,6 @@
 ## Xiaomi SM8350 Device MiYume HyperOSKernel ##
 
-基于上游https://github.com/hushangda/android_kernel_xiaomi_sm8350_venus
+基于上游 https://github.com/hushangda/android_kernel_xiaomi_sm8350_venus
 
 ## 支持设备 ##
 - Xiaomi 11 (venus)
