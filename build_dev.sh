@@ -16,12 +16,7 @@ export PATH="/home/morizukineko/toolchain/clang-r584948b/bin:$PATH"
 export KBUILD_BUILD_HOST=NikoNeko-Studio
 export KBUILD_BUILD_USER=NikoRur_QwQRuaa
 export SOURCE_DATE_EPOCH=$(date +%s)
-
-
 yellow "构建SukiSU+KPM版本"
-
-
-
-make -j$(nproc --all) ARCH=arm64 LLVM=1 LLVM_IAS=1 O=out odin_defconfig && \
+make -j$(nproc --all) ARCH=arm64 LLVM=1 LLVM_IAS=1 O=out venus_defconfig && \
 scripts/config --file out/.config -e LTO_CLANG -d LTO_NONE -e LTO_CLANG_THIN -d LTO_CLANG_FULL -e THINLTO && \
 make -j$(nproc --all) ARCH=arm64 LLVM=1 LLVM_IAS=1 O=out modules Image
