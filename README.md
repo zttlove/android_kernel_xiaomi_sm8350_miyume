@@ -9,7 +9,7 @@
 
 ## 内核特性 ##
 - 内核版本：5.4.302
-- 集成 ReSukiSU + SuSFS
+- 集成 ReSukiSU 4.1.2 + SuSFS
 - Backport BPF (Kernel5.10)
 - 启用 LTO (ThinLTO) 优化
 - 测试 Android 13 含更高正常
