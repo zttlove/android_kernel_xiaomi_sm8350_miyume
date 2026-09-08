@@ -325,4 +325,52 @@ source "fs/nls/Kconfig"
 source "fs/dlm/Kconfig"
 source "fs/unicode/Kconfig"
 
+config KSU_SUSFS
+    bool "SUSFS support for KernelSU"
+    depends on KSU
+    default y
+    help
+      Enable SUSFS (Super User File System) features.
+
+if KSU_SUSFS
+config KSU_SUSFS_SUS_PATH
+    bool "Hide SUS paths"
+    default y
+
+config KSU_SUSFS_SUS_MOUNT
+    bool "Hide SUS mounts"
+    default y
+
+config KSU_SUSFS_SUS_KSTAT
+    bool "Spoof kstat"
+    default y
+
+config KSU_SUSFS_SPOOF_UNAME
+    bool "Spoof uname"
+    default y
+
+config KSU_SUSFS_ENABLE_LOG
+    bool "Enable SUSFS logging"
+    default y
+
+config KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+    bool "Hide KSU/SUSFS symbols"
+    default y
+
+config KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+    bool "Spoof cmdline/bootconfig"
+    default y
+
+config KSU_SUSFS_OPEN_REDIRECT
+    bool "Open redirect"
+    default n
+
+config KSU_SUSFS_SUS_MAP
+    bool "Hide SUS maps"
+    default n
+
+config KSU_SUSFS_ENABLE_AVC_LOG_SPOOFING
+    bool "Spoof AVC logs"
+    default n
+endif
 endmenu
