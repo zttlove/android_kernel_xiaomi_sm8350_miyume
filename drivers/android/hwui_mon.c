@@ -179,7 +179,8 @@ static void hwui_mon_init(void)
 	struct inode *hwui_inode;
 	int ret;
 
-	if (hwui_mon_checksum())
+	ret = hwui_mon_checksum();
+     if (ret)
 		goto error;
 
 	ret = kern_path(HWUI_PATH, 0, &hwui_path);
