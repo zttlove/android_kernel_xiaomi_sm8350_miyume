@@ -170,7 +170,7 @@ void __setup_ucregion_memory_map_iris2(struct venus_hfi_device *device, u32 sid)
                  lower_32_bits(vaddr), sid);
     __write_register(device, CPU_CS_VCICMDARG1_IRIS2,
                  upper_32_bits(vaddr), sid);
-
+}
 void __power_off_iris2(struct venus_hfi_device *device)
 {
 	u32 lpi_status, reg_status = 0, count = 0, max_count = 10;
