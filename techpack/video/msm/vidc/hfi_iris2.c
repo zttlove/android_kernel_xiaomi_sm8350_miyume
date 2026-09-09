@@ -165,13 +165,11 @@ void __setup_ucregion_memory_map_iris2(struct venus_hfi_device *device, u32 sid)
 	if (device->qdss.align_device_addr)
 		__write_register(device, MMAP_ADDR_IRIS2,
 				(u32)device->qdss.align_device_addr, sid);
-	/* update queues vaddr for debug purpose */
-	__write_register(device, CPU_CS_VCICMDARG0_IRIS2,
-		(u32)device->iface_q_table.align_virtual_addr, sid);
-	__write_register(device, CPU_CS_VCICMDARG1_IRIS2,
-		(u32)((u64)device->iface_q_table.align_virtual_addr >> 32),
-		sid);
-}
+	u64 vaddr = (u64)(uintptr_t)device->iface_q_table.align_virtual_addr;
+    __write_register(device, CPU_CS_VCICMDARG0_IRIS2,
+                 lower_32_bits(vaddr), sid);
+    __write_register(device, CPU_CS_VCICMDARG1_IRIS2,
+                 upper_32_bits(vaddr), sid);
 
 void __power_off_iris2(struct venus_hfi_device *device)
 {
