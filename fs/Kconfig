@@ -325,6 +325,7 @@ source "fs/nls/Kconfig"
 source "fs/dlm/Kconfig"
 source "fs/unicode/Kconfig"
 
+endmenu
 config KSU_SUSFS
     bool "SUSFS support for KernelSU"
     depends on KSU
@@ -373,4 +374,3 @@ config KSU_SUSFS_ENABLE_AVC_LOG_SPOOFING
     bool "Spoof AVC logs"
     default n
 endif
-endmenu
