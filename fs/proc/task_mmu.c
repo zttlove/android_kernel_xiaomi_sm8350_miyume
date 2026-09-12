@@ -1609,6 +1609,7 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 {
 	struct mm_struct *mm = file->private_data;
 	struct pagemapread pm;
+    struct vm_area_struct *vma;
 	unsigned long src;
 	unsigned long svpfn;
 	unsigned long start_vaddr;
