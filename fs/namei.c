@@ -4789,6 +4789,17 @@ const char *page_get_link(struct dentry *dentry, struct inode *inode,
 }
 
 EXPORT_SYMBOL(page_get_link);
+/*
+ * 5.4 兼容包装：5.10 中没有 page_get_link_raw。
+ * 如果调用方只是需要从 pagecache 读取符号链接内容，
+ * 直接复用 page_get_link 即可。
+ */
+const char *page_get_link_raw(struct dentry *dentry, struct inode *inode,
+			      struct delayed_call *callback)
+{
+	return page_get_link(dentry, inode, callback);
+}
+EXPORT_SYMBOL(page_get_link_raw);
 
 void page_put_link(void *arg)
 {
