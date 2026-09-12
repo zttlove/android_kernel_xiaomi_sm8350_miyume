@@ -24,7 +24,8 @@
 struct mount;
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat);
+extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
+extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat, u32 result_mask);
 #endif
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 extern int susfs_get_non_sus_mnt_id_from_mnt(struct mount *orig_mnt);
