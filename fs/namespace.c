@@ -123,6 +123,11 @@ static int mnt_alloc_id(struct mount *mnt)
 
 static void mnt_free_id(struct mount *mnt)
 {
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	if (mnt->mnt.mnt_flags & VFSMOUNT_MNT_FLAGS_KSU_UNSHARED_MNT)
+		return;
+
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 
 	ida_free(&mnt_id_ida, mnt->mnt_id);
 }
