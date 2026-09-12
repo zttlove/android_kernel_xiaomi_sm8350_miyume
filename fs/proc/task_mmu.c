@@ -21,7 +21,9 @@
 #include <linux/pkeys.h>
 #include <linux/mm_inline.h>
 #include <linux/ctype.h>
-
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+#include <linux/susfs_def.h>
+#endif
 #include <asm/elf.h>
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
