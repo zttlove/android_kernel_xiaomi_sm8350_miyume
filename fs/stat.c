@@ -138,9 +138,6 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 
 	generic_fillattr(inode, stat);
 	return 0;
-
-	generic_fillattr(inode, stat);
-	return 0;
 }
 EXPORT_SYMBOL(vfs_getattr_nosec);
 
