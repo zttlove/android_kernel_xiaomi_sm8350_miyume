@@ -329,7 +329,27 @@ static int filldir64(struct dir_context *ctx, const char *name, int namlen,
 	if (prev_reclen && signal_pending(current))
 		return -EINTR;
 	dirent = buf->current_dir;
+	
+	if (prev_reclen && signal_pending(current))
+		return -EINTR;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	inode = ilookup(buf->sb, ino);
+	if (!inode) {
+		goto orig_flow;
+	}
+	if (susfs_is_inode_sus_path(inode)) {
+		iput(inode);
+		return 0;
+	}
+	iput(inode);
+orig_flow:
+#endif
+	dirent = buf->current_dir;
 
+	prev = (void __user *)dirent - prev_reclen;
+	if (!user_access_begin(prev, reclen + prev_reclen))
+		goto efault;
+	
 	prev = (void __user *)dirent - prev_reclen;
 	if (!user_access_begin(prev, reclen + prev_reclen))
 		goto efault;
