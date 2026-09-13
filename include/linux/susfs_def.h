@@ -52,6 +52,8 @@
 
 #ifndef FUSE_SUPER_MAGIC
 #define FUSE_SUPER_MAGIC 0x65735546
+#endif
+
 #define STATX_SUS_KSTAT		(1 << 30)
 #define STATX_SUS_KSTAT_FUSE	(1 << 29)
 
@@ -62,7 +64,7 @@ static inline bool susfs_is_current_app_uid(void) {
 	return current_uid().val >= 10000;
 #endif
 }
-#endif
+
 /*
  * inode->i_state => A 'unsigned long' type storing flag 'AS_FLAGS_', bit 1 to 31 is not usable since 6.12
  * nd->state => storing flag 'ND_STATE_'
