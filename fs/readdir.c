@@ -85,7 +85,32 @@ EXPORT_SYMBOL(iterate_dir);
 
 /*
  * POSIX says that a dirent name cannot contain NULL or a '/'.
- * ...
+ *
+ * It's not 100% clear what we should really do in this case.
+ * The filesystem is clearly corrupted, but returning a hard
+ * error means that you now don't see any of the other names
+ * either, so that isn't a perfect alternative.
+ *
+ * And if you return an error, what error do you use? Several
+ * filesystems seem to have decided on EUCLEAN being the error
+ * code for EFSCORRUPTED, and that may be the error to use. Or
+ * just EIO, which is perhaps more obvious to users.
+ *
+ * In order to see the other file names in the directory, the
+ * caller might want to make this a "soft" error: skip the
+ * entry, and return the error at the end instead.
+ *
+ * Note that this should likely do a "memchr(name, 0, len)"
+ * check too, since that would be filesystem corruption as
+ * well. However, that case can't actually confuse user space,
+ * which has to do a strlen() on the name anyway to find the
+ * filename length, and the above "soft error" worry means
+ * that it's probably better left alone until we have that
+ * issue clarified.
+ *
+ * Note the PATH_MAX check - it's arbitrary but the real
+ * kernel limit on a possible path component, not NAME_MAX,
+ * which is the technical standard limit.
  */
 static int verify_dirent_name(const char *name, int len)
 {
@@ -95,6 +120,15 @@ static int verify_dirent_name(const char *name, int len)
 		return -EIO;
 	return 0;
 }
+
+/*
+ * Traditional linux readdir() handling..
+ *
+ * "count=1" is a special case, meaning that the buffer is one
+ * dirent-structure in size and that the code can't handle more
+ * anyway. Thus the special "fillonedir()" function for that
+ * case (the low-level handlers don't need to care about this).
+ */
 
 #ifdef __ARCH_WANT_OLD_READDIR
 
@@ -208,6 +242,10 @@ orig_flow:
 
 #endif /* __ARCH_WANT_OLD_READDIR */
 
+/*
+ * New, all-improved, singing, dancing, iBCS2-compliant getdents()
+ * interface. 
+ */
 struct linux_dirent {
 	unsigned long	d_ino;
 	unsigned long	d_off;
@@ -390,6 +428,7 @@ static int filldir64(struct dir_context *ctx, const char *name, int namlen,
 orig_flow:
 #endif
 	dirent = buf->current_dir;
+
 	prev = (void __user *)dirent - prev_reclen;
 	if (!user_access_begin(prev, reclen + prev_reclen))
 		goto efault;
