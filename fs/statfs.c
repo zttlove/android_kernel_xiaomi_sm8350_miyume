@@ -91,7 +91,7 @@ EXPORT_SYMBOL(vfs_get_fsid);
 
 int vfs_statfs(const struct path *path, struct kstatfs *buf)
 {
-	int error;
+	int error = 0;
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 	struct inode *inode = path->dentry->d_inode;
 
@@ -106,6 +106,7 @@ int vfs_statfs(const struct path *path, struct kstatfs *buf)
 #if defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 orig_flow:
 #endif // #if defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
+
 	if (!error)
 		buf->f_flags = calculate_f_flags(path->mnt);
 	return error;
