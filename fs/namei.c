@@ -2564,6 +2564,27 @@ struct dentry *lookup_one_len_unlocked(const char *name,
 }
 EXPORT_SYMBOL(lookup_one_len_unlocked);
 
+/**
+ * lookup_positive_unlocked - look up a positive dentry in a locked directory
+ * @name: name to look up
+ * @base: the directory to use as the base of the path
+ * @len: length of @name
+ *
+ * This is a wrapper around lookup_one_len_unlocked() that returns -ENOENT
+ * if the dentry is negative.
+ */
+struct dentry *lookup_positive_unlocked(const char *name,
+		struct dentry *base, int len)
+{
+	struct dentry *ret = lookup_one_len_unlocked(name, base, len);
+	if (!IS_ERR(ret) && d_really_is_negative(ret)) {
+		dput(ret);
+		ret = ERR_PTR(-ENOENT);
+	}
+	return ret;
+}
+EXPORT_SYMBOL(lookup_positive_unlocked);	
+
 #ifdef CONFIG_UNIX98_PTYS
 int path_pts(struct path *path)
 {
