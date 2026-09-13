@@ -29,9 +29,7 @@
 #include <linux/sched/task.h>
 #include <uapi/linux/mount.h>
 #include <linux/fs_context.h>
-#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 #include <linux/susfs_def.h>
-#endif
 #include <linux/shmem_fs.h>
 
 #include "pnode.h"
