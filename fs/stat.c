@@ -211,8 +211,7 @@ EXPORT_SYMBOL(vfs_statx_fd);
 #ifdef CONFIG_KSU
 extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
 			   int *flags);
-extern void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr);
-extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr);
+
 #endif
 /**
  * vfs_statx - Get basic and extra attributes by filename
@@ -450,10 +449,7 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 
 	if (!error)
 		error = cp_new_stat(&stat, statbuf);
-#ifdef CONFIG_KSU
-	if (!error)
-		ksu_handle_newfstat_ret(&fd, &statbuf);
-#endif
+
 
 	return error;
 }
@@ -581,10 +577,7 @@ SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __user *, statbuf)
 
 	if (!error)
 		error = cp_new_stat64(&stat, statbuf);
-#ifdef CONFIG_KSU
-	if (!error)
-		ksu_handle_fstat64_ret(&fd, &statbuf);
-#endif
+
 
 	return error;
 }
@@ -754,10 +747,6 @@ COMPAT_SYSCALL_DEFINE2(newfstat, unsigned int, fd,
 
 	if (!error)
 		error = cp_compat_stat(&stat, statbuf);
-#ifdef CONFIG_KSU
-	if (!error)
-		ksu_handle_newfstat_ret(&fd, (struct stat __user **)&statbuf);
-#endif
 	return error;
 }
 #endif
