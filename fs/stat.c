@@ -211,6 +211,7 @@ EXPORT_SYMBOL(vfs_statx_fd);
 #ifdef CONFIG_KSU
 extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
 			   int *flags);
+extern void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr);
 #endif
 
 /**
@@ -445,6 +446,10 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 
 	if (!error)
 		error = cp_new_stat(&stat, statbuf);
+#ifdef CONFIG_KSU
+	if (!error)
+		ksu_handle_newfstat_ret(&fd, &statbuf);
+#endif
 
 	return error;
 }
@@ -737,6 +742,10 @@ COMPAT_SYSCALL_DEFINE2(newfstat, unsigned int, fd,
 
 	if (!error)
 		error = cp_compat_stat(&stat, statbuf);
+#ifdef CONFIG_KSU
+	if (!error)
+		ksu_handle_newfstat_ret(&fd, (struct stat __user **)&statbuf);
+#endif
 	return error;
 }
 #endif
