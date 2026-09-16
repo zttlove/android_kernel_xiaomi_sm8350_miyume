@@ -7,7 +7,7 @@
  * Based on code from fs/super.c, copyright Linus Torvalds and others.
  * Heavily rewritten.
  */
-
+/* CONFIG_KSU_SUSFS */
 #include <linux/syscalls.h>
 #include <linux/export.h>
 #include <linux/capability.h>
