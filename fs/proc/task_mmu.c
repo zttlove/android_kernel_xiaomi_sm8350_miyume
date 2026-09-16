@@ -929,6 +929,12 @@ static int show_smap(struct seq_file *m, void *v)
 {
 	struct vm_area_struct *vma = v;
 	struct mem_size_stats mss;
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+	if (vma->vm_file) {
+		if (SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
+			return;
+	}
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 
 	memset(&mss, 0, sizeof(mss));
 
