@@ -685,6 +685,10 @@ long __sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 		goto error;
 
 #ifdef CONFIG_KSU_SUSFS
+	/*
+	 * SUSFS hook：在 commit_creds() 之前通知 KSU 即将发生的 setresuid。
+	 * 返回值为 void，不影响主流程。
+	 */
 	(void)ksu_handle_setresuid(ruid, euid, suid);
 #endif
 
@@ -1250,8 +1254,9 @@ static int override_release(char __user *release, size_t len)
 
 #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
 extern struct static_key_false susfs_is_uname_spoof_buffer_set;
-extern void susfs_spoof_uname(struct new_utsname* tmp);
+extern void susfs_spoof_uname(struct new_utsname *tmp);
 #endif
+
 SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {
 	struct new_utsname tmp;
@@ -1262,19 +1267,8 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 	if (static_branch_likely(&susfs_is_uname_spoof_buffer_set))
 		susfs_spoof_uname(&tmp);
 #endif
-	/*
-	 * Android 25Q4 and later make netbpfload reject kernels older than
-	 * 5.10 based solely on uname(2).  This 5.4 vendor kernel carries the
-	 * required 5.10 BPF backport, so expose the corresponding compatibility
-	 * level only to that loader.  Keep the real release visible everywhere
-	 * else: globally changing UTS_RELEASE would also change module vermagic
-	 * and userspace feature selection unrelated to BPF.
-	 */
-	if (!strcmp(current->comm, "netbpfload")) {
-		strscpy(tmp.release, "5.10.199-dsu-bpf-compat",
-			sizeof(tmp.release));
-	}
 	up_read(&uts_sem);
+
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
 
@@ -1607,9 +1601,9 @@ int do_prlimit(struct task_struct *tsk, unsigned int resource,
 	 * infite. In case of RLIM_INFINITY the posix CPU timer code
 	 * ignores the rlimit.
 	 */
-	 if (!retval && new_rlim && resource == RLIMIT_CPU &&
-	     new_rlim->rlim_cur != RLIM_INFINITY &&
-	     IS_ENABLED(CONFIG_POSIX_TIMERS))
+	if (!retval && new_rlim && resource == RLIMIT_CPU &&
+	    new_rlim->rlim_cur != RLIM_INFINITY &&
+	    IS_ENABLED(CONFIG_POSIX_TIMERS))
 		update_rlimit_cpu(tsk, new_rlim->rlim_cur);
 out:
 	read_unlock(&tasklist_lock);
