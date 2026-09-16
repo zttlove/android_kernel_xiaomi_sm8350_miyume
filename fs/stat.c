@@ -27,7 +27,9 @@
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
-extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat, u32 result_mask);
+extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode,
+						   struct kstat *stat,
+						   u32 result_mask);
 #endif
 
 #ifdef CONFIG_KSU_SUSFS
@@ -62,6 +64,28 @@ void generic_fillattr(struct inode *inode, struct kstat *stat)
 }
 EXPORT_SYMBOL(generic_fillattr);
 
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+/*
+ * 标记当前 stat 结果需要 SUSFS 伪装。返回 true 表示已标记。
+ * 仅在当前进程属于 app uid 且目标 inode 在 sus kstat 列表中时生效。
+ */
+static bool susfs_mark_sus_kstat(const struct path *path, struct kstat *stat)
+{
+	bool is_fuse = false;
+
+	if (!susfs_is_current_app_uid())
+		return false;
+
+	if (!susfs_is_inode_sus_kstat(d_backing_inode(path->dentry), &is_fuse))
+		return false;
+
+	if (!is_fuse)
+		stat->result_mask |= STATX_SUS_KSTAT;
+	stat->result_mask |= STATX_SUS_KSTAT_FUSE;
+	return true;
+}
+#endif /* CONFIG_KSU_SUSFS_SUS_KSTAT */
+
 /**
  * vfs_getattr_nosec - getattr without security checks
  * @path: file to get attributes from
@@ -79,6 +103,7 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 		      u32 request_mask, unsigned int query_flags)
 {
 	struct inode *inode = d_backing_inode(path->dentry);
+	int err;
 
 	memset(stat, 0, sizeof(*stat));
 	stat->result_mask |= STATX_BASIC_STATS;
@@ -92,54 +117,40 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 		stat->attributes |= STATX_ATTR_AUTOMOUNT;
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-	if (susfs_is_current_app_uid()) {
-		bool is_fuse = false;
-		if (susfs_is_inode_sus_kstat(d_backing_inode(path->dentry), &is_fuse)) {
-			if (!is_fuse) {
-				// stat->mnt_id = real_mount(path->mnt)->mnt_id;
-				// only for 5.10 kernel
-				stat->result_mask |= STATX_SUS_KSTAT;
-			}
-			// stat->mnt_id = real_mount(path->mnt)->mnt_id;
-			// only for 5.10 kernel
-			stat->result_mask |= STATX_SUS_KSTAT_FUSE;
-		}
-	}
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	susfs_mark_sus_kstat(path, stat);
+#endif
 
-	if (inode->i_op->getattr)
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-	{
-		int err = inode->i_op->getattr(path, stat, request_mask,
-					    query_flags);
-		if (!err) {
-			if (stat->result_mask & STATX_SUS_KSTAT) {
-				susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT);
-				return err;
-			}
-			if (stat->result_mask & STATX_SUS_KSTAT_FUSE) {
-				susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT_FUSE);
-			return err;
-			}
-		}
+	if (!inode->i_op->getattr)
+		goto fill_generic;
+
+	err = inode->i_op->getattr(path, stat, request_mask, query_flags);
+	if (err)
 		return err;
-	}
+
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 	if (stat->result_mask & STATX_SUS_KSTAT) {
-		generic_fillattr(inode, stat);
-		susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT);
+		susfs_sus_kstat_spoof_generic_fillattr(inode, stat,
+						       STATX_SUS_KSTAT);
 		return 0;
 	}
 	if (stat->result_mask & STATX_SUS_KSTAT_FUSE) {
-		generic_fillattr(inode, stat);
-		susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT_FUSE);
+		susfs_sus_kstat_spoof_generic_fillattr(inode, stat,
+						       STATX_SUS_KSTAT_FUSE);
 		return 0;
 	}
-#else
- 		return inode->i_op->getattr(path, stat, request_mask,
- 					    query_flags);
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+#endif
+	return 0;
 
+fill_generic:
 	generic_fillattr(inode, stat);
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	if (stat->result_mask & STATX_SUS_KSTAT)
+		susfs_sus_kstat_spoof_generic_fillattr(inode, stat,
+						       STATX_SUS_KSTAT);
+	else if (stat->result_mask & STATX_SUS_KSTAT_FUSE)
+		susfs_sus_kstat_spoof_generic_fillattr(inode, stat,
+						       STATX_SUS_KSTAT_FUSE);
+#endif
 	return 0;
 }
 EXPORT_SYMBOL(vfs_getattr_nosec);
@@ -433,11 +444,11 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 {
 	struct kstat stat;
 	int error;
-	
+
 #ifdef CONFIG_KSU
 	ksu_handle_stat(&dfd, &filename, &flag);
 #endif
-	
+
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
 		return error;
@@ -587,11 +598,11 @@ SYSCALL_DEFINE4(fstatat64, int, dfd, const char __user *, filename,
 {
 	struct kstat stat;
 	int error;
-	
+
 #ifdef CONFIG_KSU
 	ksu_handle_stat(&dfd, &filename, &flag);
 #endif
-	
+
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
 		return error;
