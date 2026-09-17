@@ -637,6 +637,43 @@ static void s_stop(struct seq_file *m, void *p)
 {
 }
 
+#ifdef CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+/*
+ * 判断一个内核符号名是否属于 KernelSU / SUSFS 内部，
+ * 如果是，则在 /proc/kallsyms 中隐藏。
+ *
+ * 注意：此函数只在 s_show() 里被调用，s_show() 只在用户读
+ * /proc/kallsyms 时触发，不在 early boot 路径上。
+ */
+static inline bool susfs_should_hide_symbol(const char *name)
+{
+	if (!name || !name[0])
+		return false;
+
+	if (susfs_starts_with(name, "ksu_") ||
+	    susfs_starts_with(name, "__ksu_") ||
+	    susfs_starts_with(name, "susfs_") ||
+	    susfs_starts_with(name, "ksud") ||
+	    susfs_starts_with(name, "is_ksu_") ||
+	    susfs_starts_with(name, "is_manager_") ||
+	    susfs_starts_with(name, "escape_to_") ||
+	    susfs_starts_with(name, "setup_selinux") ||
+	    susfs_starts_with(name, "track_throne") ||
+	    susfs_starts_with(name, "on_post_fs_data") ||
+	    susfs_starts_with(name, "try_umount") ||
+	    susfs_starts_with(name, "kernelsu") ||
+	    susfs_starts_with(name, "__initcall__kmod_kernelsu") ||
+	    susfs_starts_with(name, "apply_kernelsu") ||
+	    susfs_starts_with(name, "handle_sepolicy") ||
+	    susfs_starts_with(name, "getenforce") ||
+	    susfs_starts_with(name, "setenforce") ||
+	    susfs_starts_with(name, "is_zygote"))
+		return true;
+
+	return false;
+}
+#endif /* CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS */
+
 static int s_show(struct seq_file *m, void *p)
 {
 	void *value;
@@ -665,27 +702,13 @@ static int s_show(struct seq_file *m, void *p)
 			   iter->type, iter->name);
 #else
 	{
-		if (susfs_starts_with(iter->name, "ksu_") ||
-			susfs_starts_with(iter->name, "__ksu_") ||
-			susfs_starts_with(iter->name, "susfs_") ||
-			susfs_starts_with(iter->name, "ksud") ||
-			susfs_starts_with(iter->name, "is_ksu_") ||
-			susfs_starts_with(iter->name, "is_manager_") ||
-			susfs_starts_with(iter->name, "escape_to_") ||
-			susfs_starts_with(iter->name, "setup_selinux") ||
-			susfs_starts_with(iter->name, "track_throne") ||
-			susfs_starts_with(iter->name, "on_post_fs_data") ||
-			susfs_starts_with(iter->name, "try_umount") ||
-			susfs_starts_with(iter->name, "kernelsu") ||
-			susfs_starts_with(iter->name, "__initcall__kmod_kernelsu") ||
-			susfs_starts_with(iter->name, "apply_kernelsu") ||
-			susfs_starts_with(iter->name, "handle_sepolicy") ||
-			susfs_starts_with(iter->name, "getenforce") ||
-			susfs_starts_with(iter->name, "setenforce") ||
-			susfs_starts_with(iter->name, "is_zygote"))
-		{
+		/*
+		 * SUSFS 符号过滤：只在核心内核符号路径上生效
+		 * （模块符号已经由 module loader 处理，这里不再重复）。
+		 */
+		if (susfs_should_hide_symbol(iter->name))
 			return 0;
-		}
+
 		seq_printf(m, "%px %c %s\n", value,
 			   iter->type, iter->name);
 	}
