@@ -1538,8 +1538,8 @@ static int sugov_init(struct cpufreq_policy *policy)
 
 	cpufreq_enable_fast_switch(policy);
 
-#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SUGOV_POWER_EFFIENCY)
-        frequence_opp_init(policy);
+#ifdef CONFIG_OPLUS_FEATURE_SUGOV_POWER_EFFIENCY
+	frequence_opp_init(policy);
 #endif
 
 	sg_policy = sugov_policy_alloc(policy);
