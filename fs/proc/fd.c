@@ -20,10 +20,6 @@
 #include "internal.h"
 #include "fd.h"
 
-#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-extern int susfs_get_non_sus_mnt_id_from_mnt(struct mount *orig_mnt);
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
 extern void susfs_sus_kstat_spoof_proc_fd_seq_show(int *out_target_mnt_id, unsigned long *out_target_ino, dev_t target_dev);
@@ -69,10 +65,13 @@ static int seq_show(struct seq_file *m, void *v)
 	if (susfs_is_current_app_uid()) {
 		struct inode *inode = file_inode(file);
 		bool is_fuse = false;
-		if (susfs_is_inode_sus_kstat(inode, &is_fuse)) {
+
+		if (inode && susfs_is_inode_sus_kstat(inode, &is_fuse)) {
 			int mnt_id = real_mount(file->f_path.mnt)->mnt_id;
 			unsigned long ino = inode->i_ino;
-			susfs_sus_kstat_spoof_proc_fd_seq_show(&mnt_id, &ino, inode->i_sb->s_dev);
+
+			susfs_sus_kstat_spoof_proc_fd_seq_show(&mnt_id, &ino,
+							       inode->i_sb->s_dev);
 			seq_printf(m, "pos:\t%lli\nflags:\t0%o\nmnt_id:\t%i\nino:\t%lu\n",
 					(long long)file->f_pos, f_flags,
 					mnt_id,
@@ -82,49 +81,23 @@ static int seq_show(struct seq_file *m, void *v)
 	}
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 
-#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-	if (likely(susfs_is_current_proc_umounted())) {
-		struct mount *mnt = real_mount(file->f_path.mnt);
-		if (mnt->mnt_id >= DEFAULT_KSU_MNT_ID) {
-			struct path path;
-			char *pathname = kmalloc(PAGE_SIZE, GFP_KERNEL);
-			char *dpath;
+	/*
+	 * 注意：原来的 SUS_MOUNT 分支（`susfs_is_current_proc_umounted()` +
+	 * `d_path()` + `kern_path()`）已整个删除。原因：
+	 *
+	 *   1. `if (!dpath)` 检查错误：d_path() 从不返回 NULL，失败时返回
+	 *      ERR_PTR(-ENAMETOOLONG) 等错误指针。`!dpath` 为 false 会继续
+	 *      执行 `kern_path(ERR_PTR, ...)`，把错误指针当字符串用，内核崩溃。
+	 *   2. `kern_path()` 内部可能睡眠，而 seq_show() 运行在 seq_file
+	 *      上下文，加锁状态复杂，容易死锁或触发 "scheduling while atomic"。
+	 *   3. `susfs_is_current_proc_umounted()` 在 init 阶段可能返回 true，
+	 *      init 枚举 /proc/pid/fdinfo/ 时会进入此分支，一旦 d_path 失败
+	 *      就 panic → reboot → 无限重启。
+	 *
+	 * SUS_MOUNT 的 fdinfo 伪装功能损失，但不会无限重启。
+	 */
 
-			if (!pathname) {
-				goto orig_flow;
-			}
-			dpath = d_path(&file->f_path, pathname, PAGE_SIZE);
-			if (!dpath) {
-				goto out_kfree;
-			}
-			if (kern_path(dpath, 0, &path)) {
-				goto out_kfree;
-			}
-			if (!d_backing_inode(path.dentry)) {
-				goto out_path_put;
-			}
-
-			seq_printf(m, "pos:\t%lli\nflags:\t0%o\nmnt_id:\t%i\nino:\t%lu\n",
-					(long long)file->f_pos, f_flags,
-					susfs_get_non_sus_mnt_id_from_mnt(mnt),
-					d_backing_inode(path.dentry)->i_ino);
-			path_put(&path);
-			kfree(pathname);
-			goto bypass_orig_flow;
-out_path_put:
-			path_put(&path);
-out_kfree:
-			kfree(pathname);
-			goto orig_flow;
-		}
-	}
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-
-#if defined(CONFIG_KSU_SUSFS_SUS_MOUNT)
-orig_flow:
-#endif // #if defined(CONFIG_KSU_SUSFS_SUS_MOUNT)
-
-#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MOUNT)
+#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT)
 	seq_printf(m, "pos:\t%lli\nflags:\t0%o\nmnt_id:\t%i\nino:\t%lu\n",
 			(long long)file->f_pos, f_flags,
 			real_mount(file->f_path.mnt)->mnt_id,
@@ -133,11 +106,11 @@ orig_flow:
 	seq_printf(m, "pos:\t%lli\nflags:\t0%o\nmnt_id:\t%i\n",
 		   (long long)file->f_pos, f_flags,
 		   real_mount(file->f_path.mnt)->mnt_id);
-#endif // #if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MOUNT)
+#endif // #if defined(CONFIG_KSU_SUSFS_SUS_KSTAT)
 
-#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MOUNT)
+#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT)
 bypass_orig_flow:
-#endif // #if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MOUNT)
+#endif
 
 	show_fd_locks(m, file, files);
 	if (seq_has_overflowed(m))
