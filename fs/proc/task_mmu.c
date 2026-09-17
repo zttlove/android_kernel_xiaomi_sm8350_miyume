@@ -379,7 +379,7 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	if (file) {
 		struct inode *inode = file_inode(vma->vm_file);
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
-		if (SUSFS_IS_INODE_OPEN_REDIRECT(inode)) {
+		if (inode && SUSFS_IS_INODE_OPEN_REDIRECT(inode)) {
 			char *spoofed_redirected_name = NULL;
 			int srcu_idx = srcu_read_lock(&susfs_srcu_open_redirect);
 			int ret = susfs_open_redirect_spoof_show_map_vma_srcu(inode, &ino, &dev, &spoofed_redirected_name);
@@ -399,7 +399,7 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 		}
 #endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
-		if (SUSFS_IS_INODE_SUS_MAP(inode))
+		if (inode && SUSFS_IS_INODE_SUS_MAP(inode))
 			return;
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		dev = inode->i_sb->s_dev;
@@ -933,10 +933,21 @@ static int show_smap(struct seq_file *m, void *v)
 	memset(&mss, 0, sizeof(mss));
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
+	/*
+	 * 在调用 show_map_vma() 之前先做 SUS_MAP 检查。
+	 * 如果 vma 是 sus map：
+	 *   - show_map_vma() 会直接 return（不输出 vma 头部）
+	 *   - 但 show_smap() 仍会输出 Size/Rss 等字段
+	 *   - 导致 smaps 输出格式错乱
+	 *
+	 * 所以这里必须整体处理：输出一个伪造的空 smaps 条目，
+	 * 然后 return，让用户看到"这个 vma 存在但全部为 0"，
+	 * 而不是看到一个只有字段没有头部的残缺条目。
+	 */
 	if (vma->vm_file) {
 		struct inode *inode = file_inode(vma->vm_file);
 
-		if (SUSFS_IS_INODE_SUS_MAP(inode)) {
+		if (inode && SUSFS_IS_INODE_SUS_MAP(inode)) {
 			show_map_vma(m, vma);
 			SEQ_PUT_DEC("Size:           ", vma->vm_end - vma->vm_start);
 			SEQ_PUT_DEC(" kB\nKernelPageSize: ", vma_kernel_pagesize(vma));
@@ -1008,9 +1019,12 @@ static int show_smaps_rollup(struct seq_file *m, void *v)
 
 	for (vma = priv->mm->mmap; vma; vma = vma->vm_next) {
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
-		if (vma->vm_file &&
-		    SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
-			goto bypass_orig_flow;
+		if (vma->vm_file) {
+			struct inode *inode = file_inode(vma->vm_file);
+
+			if (inode && SUSFS_IS_INODE_SUS_MAP(inode))
+				goto bypass_orig_flow;
+		}
 #endif
 		smap_gather_stats(vma, &mss);
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
@@ -1740,11 +1754,14 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 			goto out_free;
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		vma = find_vma(mm, start_vaddr);
-		if (vma && vma->vm_file &&
-		    SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file))) {
-			mmap_read_unlock(mm);
-			start_vaddr = min(end, vma->vm_end);
-			continue;
+		if (vma && vma->vm_file) {
+			struct inode *inode = file_inode(vma->vm_file);
+
+			if (inode && SUSFS_IS_INODE_SUS_MAP(inode)) {
+				mmap_read_unlock(mm);
+				start_vaddr = min(end, vma->vm_end);
+				continue;
+			}
 		}
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		ret = walk_page_range(mm, start_vaddr, end, &pagemap_ops, &pm);
