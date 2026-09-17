@@ -124,34 +124,30 @@ int vfs_statfs(const struct path *path, struct kstatfs *buf)
 	if (susfs_is_current_app_uid()) {
 		struct inode *inode = d_backing_inode(path->dentry);
 		bool is_fuse = false;
-		if (susfs_is_inode_sus_kstat(inode, &is_fuse)) {
-			// - here we do not call calculate_f_flags() as buf->f_flags will be spoofed
-			//   by susfs_statfs_by_dentry().
+
+		if (inode && susfs_is_inode_sus_kstat(inode, &is_fuse)) {
+			/*
+			 * 这里不调用 calculate_f_flags()，因为
+			 * susfs_statfs_by_dentry() 内部会 spoof buf->f_flags。
+			 */
 			return susfs_statfs_by_dentry(path->dentry, buf, &is_fuse);
 		}
 	}
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 
-#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-	if (likely(susfs_is_current_proc_umounted())) {
-		struct vfsmount *no_sus_vfsmnt = NULL;
-		no_sus_vfsmnt = susfs_get_non_sus_vfsmnt_from_vfsmnt(path->mnt);
-		if (path->mnt == no_sus_vfsmnt) {
-			dput(no_sus_vfsmnt->mnt_root);
-			mntput(no_sus_vfsmnt);
-			error = statfs_by_dentry(path->dentry, buf);
-			if (!error)
-				buf->f_flags = calculate_f_flags(path->mnt);
-			return error;
-	}
-		error = statfs_by_dentry(no_sus_vfsmnt->mnt_root, buf);
-		if (!error)
-			buf->f_flags = calculate_f_flags(no_sus_vfsmnt);
-		dput(no_sus_vfsmnt->mnt_root);
-		mntput(no_sus_vfsmnt);
-		return error;
-	}
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+	/*
+	 * 注意：这里删除了原来的 SUS_MOUNT 分支。
+	 *
+	 * 原因：susfs_get_non_sus_vfsmnt_from_vfsmnt() 在"未找到非 sus 父挂载"时
+	 * 直接返回传入的 vfsmnt（没有额外引用），但调用者无法区分"返回原 vfsmnt"
+	 * 和"返回新 vfsmnt"两种情况，会无条件 dput/mntput，导致：
+	 *   - path->mnt 引用计数被错误减少
+	 *   - path->mnt->mnt_root 被提前 dput，后续访问崩溃
+	 *   - 内核 panic → reboot → 无限重启
+	 *
+	 * SUS_MOUNT 的 statfs 伪装功能改由 fs/namespace.c 中的
+	 * mount 树重建逻辑处理，statfs 层面不再介入。
+	 */
 
 	error = statfs_by_dentry(path->dentry, buf);
 
