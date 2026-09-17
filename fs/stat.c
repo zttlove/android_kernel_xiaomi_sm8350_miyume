@@ -68,15 +68,22 @@ EXPORT_SYMBOL(generic_fillattr);
 /*
  * 标记当前 stat 结果需要 SUSFS 伪装。返回 true 表示已标记。
  * 仅在当前进程属于 app uid 且目标 inode 在 sus kstat 列表中时生效。
+ *
+ * 必须在 inode->i_op->getattr() 返回之后再调用，
+ * 否则 FS 的 getattr 会覆盖 stat->result_mask，冲掉 SUSFS 标记。
  */
 static bool susfs_mark_sus_kstat(const struct path *path, struct kstat *stat)
 {
+	struct inode *inode = d_backing_inode(path->dentry);
 	bool is_fuse = false;
 
 	if (!susfs_is_current_app_uid())
 		return false;
 
-	if (!susfs_is_inode_sus_kstat(d_backing_inode(path->dentry), &is_fuse))
+	if (!inode)
+		return false;
+
+	if (!susfs_is_inode_sus_kstat(inode, &is_fuse))
 		return false;
 
 	if (!is_fuse)
@@ -116,10 +123,6 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 	if (IS_AUTOMOUNT(inode))
 		stat->attributes |= STATX_ATTR_AUTOMOUNT;
 
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-	susfs_mark_sus_kstat(path, stat);
-#endif
-
 	if (!inode->i_op->getattr)
 		goto fill_generic;
 
@@ -128,6 +131,11 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 		return err;
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	/*
+	 * 必须在 getattr 返回之后再标记，否则 FS 会把 result_mask 覆盖掉。
+	 */
+	susfs_mark_sus_kstat(path, stat);
+
 	if (stat->result_mask & STATX_SUS_KSTAT) {
 		susfs_sus_kstat_spoof_generic_fillattr(inode, stat,
 						       STATX_SUS_KSTAT);
@@ -144,6 +152,12 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 fill_generic:
 	generic_fillattr(inode, stat);
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	/*
+	 * generic_fillattr() 不修改 result_mask，但仍在这里补一次标记，
+	 * 保证所有 fill_generic 路径行为一致。
+	 */
+	susfs_mark_sus_kstat(path, stat);
+
 	if (stat->result_mask & STATX_SUS_KSTAT)
 		susfs_sus_kstat_spoof_generic_fillattr(inode, stat,
 						       STATX_SUS_KSTAT);
