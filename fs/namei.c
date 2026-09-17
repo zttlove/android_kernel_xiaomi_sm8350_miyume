@@ -2280,12 +2280,12 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		if (err)
 			return err;
 
-		/*
-		 * NOTE: 移除了原 SUSFS SUS_PATH 顶部检查。
-		 * 该检查会在每个路径组件前拦截，可能误伤 init 启动路径，
-		 * 导致无限重启。SUSFS 的路径隐藏改由 lookup_dcache /
-		 * __lookup_hash / lookup_fast / __lookup_slow 处理。
-		 */
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+		if (nd->path.dentry && nd->path.dentry->d_inode &&
+		    susfs_is_inode_sus_path(nd->path.dentry->d_inode)) {
+			return -ENOENT;
+		}
+#endif
 
 		hash_len = hash_name(nd->path.dentry, name);
 
