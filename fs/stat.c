@@ -729,10 +729,6 @@ COMPAT_SYSCALL_DEFINE4(newfstatat, unsigned int, dfd,
 
 	if (!error)
 		error = cp_compat_stat(&stat, statbuf);
-#ifdef CONFIG_KSU
-	if (!error)
-		ksu_handle_newfstat_ret(&fd, (struct stat __user **)&statbuf);
-#endif
 	return error;
 }
 #endif
