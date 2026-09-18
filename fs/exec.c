@@ -63,7 +63,6 @@
 #include <linux/oom.h>
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
-#include <linux/hwui_mon.h>
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -252,7 +251,7 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 		return -ENOMEM;
 	vma_set_anonymous(vma);
 
-	if (mmap_write_lock_killable(mm)) {
+	if (down_write_killable(&mm->mmap_sem)) {
 		err = -EINTR;
 		goto err_free;
 	}
@@ -275,11 +274,11 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 
 	mm->stack_vm = mm->total_vm = 1;
 	arch_bprm_mm_init(mm, vma);
-	mmap_write_unlock(mm);
+	up_write(&mm->mmap_sem);
 	bprm->p = vma->vm_end - sizeof(void *);
 	return 0;
 err:
-	mmap_write_unlock(mm);
+	up_write(&mm->mmap_sem);
 err_free:
 	bprm->vma = NULL;
 	vm_area_free(vma);
@@ -702,7 +701,7 @@ int setup_arg_pages(struct linux_binprm *bprm,
 		    unsigned long stack_top,
 		    int executable_stack)
 {
-	int ret;
+	unsigned long ret;
 	unsigned long stack_shift;
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma = bprm->vma;
@@ -750,7 +749,7 @@ int setup_arg_pages(struct linux_binprm *bprm,
 		bprm->loader -= stack_shift;
 	bprm->exec -= stack_shift;
 
-	if (mmap_write_lock_killable(mm))
+	if (down_write_killable(&mm->mmap_sem))
 		return -EINTR;
 
 	vm_flags = VM_STACK_FLAGS;
@@ -807,7 +806,7 @@ int setup_arg_pages(struct linux_binprm *bprm,
 		ret = -EFAULT;
 
 out_unlock:
-	mmap_write_unlock(mm);
+	up_write(&mm->mmap_sem);
 	return ret;
 }
 EXPORT_SYMBOL(setup_arg_pages);
@@ -1037,9 +1036,9 @@ static int exec_mmap(struct mm_struct *mm)
 		 * through with the exec.  We must hold mmap_sem around
 		 * checking core_state and changing tsk->mm.
 		 */
-		mmap_read_lock(old_mm);
+		down_read(&old_mm->mmap_sem);
 		if (unlikely(old_mm->core_state)) {
-			mmap_read_unlock(old_mm);
+			up_read(&old_mm->mmap_sem);
 			return -EINTR;
 		}
 	}
@@ -1050,7 +1049,6 @@ static int exec_mmap(struct mm_struct *mm)
 	active_mm = tsk->active_mm;
 	tsk->active_mm = mm;
 	tsk->mm = mm;
-	lru_gen_add_mm(mm);
 	/*
 	 * This prevents preemption while active_mm is being loaded and
 	 * it and mm are being updated, which could cause problems for
@@ -1066,9 +1064,8 @@ static int exec_mmap(struct mm_struct *mm)
 	tsk->mm->vmacache_seqnum = 0;
 	vmacache_flush(tsk);
 	task_unlock(tsk);
-	lru_gen_use_mm(mm);
 	if (old_mm) {
-		mmap_read_unlock(old_mm);
+		up_read(&old_mm->mmap_sem);
 		BUG_ON(active_mm != old_mm);
 		setmax_mm_hiwater_rss(&tsk->signal->maxrss, old_mm);
 		mm_update_next_owner(old_mm);
@@ -1907,20 +1904,11 @@ out_ret:
 	return retval;
 }
 
-#ifdef CONFIG_KSU
-extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
-			       void *argv, void *envp, int *flags);
-#endif
-
 static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr argv,
 			      struct user_arg_ptr envp,
 			      int flags)
 {
-#ifdef CONFIG_KSU
-		ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
-#endif
-	hwui_mon_handle_exec(filename);
 	return __do_execve_file(fd, filename, argv, envp, flags, NULL);
 }
 
