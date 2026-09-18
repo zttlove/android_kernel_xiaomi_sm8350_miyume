@@ -746,8 +746,6 @@ COMPAT_SYSCALL_DEFINE4(newfstatat, unsigned int, dfd,
 }
 #endif
 
-COMPAT_SYSCALL_DEFINE2(newfstat, unsigned int, fd,
-		       struct compat_stat __user *, statbuf)
 {
 	struct kstat stat;
 	int error = vfs_fstat(fd, &stat);
