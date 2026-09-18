@@ -9,7 +9,7 @@
 #include <linux/ptrace.h>
 #include <linux/slab.h>
 #include <linux/pagemap.h>
-#include <linux/pgsize_migration.h>
+
 #include <linux/mempolicy.h>
 #include <linux/rmap.h>
 #include <linux/swap.h>
