@@ -27,9 +27,7 @@
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
-extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode,
-						   struct kstat *stat,
-						   u32 result_mask);
+extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat, u32 result_mask);
 #endif
 
 #ifdef CONFIG_KSU_SUSFS
@@ -64,35 +62,6 @@ void generic_fillattr(struct inode *inode, struct kstat *stat)
 }
 EXPORT_SYMBOL(generic_fillattr);
 
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-/*
- * 标记当前 stat 结果需要 SUSFS 伪装。返回 true 表示已标记。
- * 仅在当前进程属于 app uid 且目标 inode 在 sus kstat 列表中时生效。
- *
- * 必须在 inode->i_op->getattr() 返回之后再调用，
- * 否则 FS 的 getattr 会覆盖 stat->result_mask，冲掉 SUSFS 标记。
- */
-static bool susfs_mark_sus_kstat(const struct path *path, struct kstat *stat)
-{
-	struct inode *inode = d_backing_inode(path->dentry);
-	bool is_fuse = false;
-
-	if (!susfs_is_current_app_uid())
-		return false;
-
-	if (!inode)
-		return false;
-
-	if (!susfs_is_inode_sus_kstat(inode, &is_fuse))
-		return false;
-
-	if (!is_fuse)
-		stat->result_mask |= STATX_SUS_KSTAT;
-	stat->result_mask |= STATX_SUS_KSTAT_FUSE;
-	return true;
-}
-#endif /* CONFIG_KSU_SUSFS_SUS_KSTAT */
-
 /**
  * vfs_getattr_nosec - getattr without security checks
  * @path: file to get attributes from
@@ -110,7 +79,6 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 		      u32 request_mask, unsigned int query_flags)
 {
 	struct inode *inode = d_backing_inode(path->dentry);
-	int err;
 
 	memset(stat, 0, sizeof(*stat));
 	stat->result_mask |= STATX_BASIC_STATS;
@@ -123,48 +91,51 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 	if (IS_AUTOMOUNT(inode))
 		stat->attributes |= STATX_ATTR_AUTOMOUNT;
 
-	if (!inode->i_op->getattr)
-		goto fill_generic;
-
-	err = inode->i_op->getattr(path, stat, request_mask, query_flags);
-	if (err)
-		return err;
-
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-	/*
-	 * 必须在 getattr 返回之后再标记，否则 FS 会把 result_mask 覆盖掉。
-	 */
-	susfs_mark_sus_kstat(path, stat);
+	{
+		bool is_fuse = false;
+		if (susfs_is_inode_sus_kstat(d_backing_inode(path->dentry), &is_fuse)) {
+			if (!is_fuse) {
+				stat->result_mask |= STATX_SUS_KSTAT;
+			}
+			stat->result_mask |= STATX_SUS_KSTAT_FUSE;
+		}
+	}
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 
+	if (inode->i_op->getattr)
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	{
+		int err = inode->i_op->getattr(path, stat, request_mask,
+					    query_flags);
+		if (!err) {
+			if (stat->result_mask & STATX_SUS_KSTAT) {
+				susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT);
+				return err;
+			}
+			if (stat->result_mask & STATX_SUS_KSTAT_FUSE) {
+				susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT_FUSE);
+				return err;
+			}
+		}
+		return err;
+	}
 	if (stat->result_mask & STATX_SUS_KSTAT) {
-		susfs_sus_kstat_spoof_generic_fillattr(inode, stat,
-						       STATX_SUS_KSTAT);
+		generic_fillattr(inode, stat);
+		susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT);
 		return 0;
 	}
 	if (stat->result_mask & STATX_SUS_KSTAT_FUSE) {
-		susfs_sus_kstat_spoof_generic_fillattr(inode, stat,
-						       STATX_SUS_KSTAT_FUSE);
+		generic_fillattr(inode, stat);
+		susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT_FUSE);
 		return 0;
 	}
-#endif
-	return 0;
+#else
+		return inode->i_op->getattr(path, stat, request_mask,
+					    query_flags);
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 
-fill_generic:
 	generic_fillattr(inode, stat);
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-	/*
-	 * generic_fillattr() 不修改 result_mask，但仍在这里补一次标记，
-	 * 保证所有 fill_generic 路径行为一致。
-	 */
-	susfs_mark_sus_kstat(path, stat);
-
-	if (stat->result_mask & STATX_SUS_KSTAT)
-		susfs_sus_kstat_spoof_generic_fillattr(inode, stat,
-						       STATX_SUS_KSTAT);
-	else if (stat->result_mask & STATX_SUS_KSTAT_FUSE)
-		susfs_sus_kstat_spoof_generic_fillattr(inode, stat,
-						       STATX_SUS_KSTAT_FUSE);
-#endif
 	return 0;
 }
 EXPORT_SYMBOL(vfs_getattr_nosec);
@@ -237,6 +208,12 @@ int vfs_statx_fd(unsigned int fd, struct kstat *stat,
 }
 EXPORT_SYMBOL(vfs_statx_fd);
 
+#ifdef CONFIG_KSU
+extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
+			   int *flags);
+extern void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr);
+extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr);
+#endif
 /**
  * vfs_statx - Get basic and extra attributes by filename
  * @dfd: A file descriptor representing the base dir for a relative filename
@@ -258,6 +235,10 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
 	struct path path;
 	int error = -EINVAL;
 	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;
+
+#ifdef CONFIG_KSU
+	ksu_handle_stat(&dfd, &filename, &flags);
+#endif
 
 	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
 		       AT_EMPTY_PATH | KSTAT_QUERY_FLAGS)) != 0)
@@ -444,28 +425,17 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
 	return cp_new_stat(&stat, statbuf);
 }
 
-#ifdef CONFIG_KSU_MANUAL_HOOK
-__attribute__((hot))
-extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
-				int *flags);
-
-extern void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr);
-#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
-extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr);
-#endif
-#endif
-
 #if !defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_SYS_NEWFSTATAT)
 SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 		struct stat __user *, statbuf, int, flag)
 {
 	struct kstat stat;
 	int error;
-
-#ifdef CONFIG_KSU_MANUAL_HOOK
+	
+#ifdef CONFIG_KSU
 	ksu_handle_stat(&dfd, &filename, &flag);
 #endif
-
+	
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
 		return error;
@@ -480,9 +450,11 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 
 	if (!error)
 		error = cp_new_stat(&stat, statbuf);
-#ifdef CONFIG_KSU_MANUAL_HOOK
-	ksu_handle_newfstat_ret(&fd, &statbuf);
+#ifdef CONFIG_KSU
+	if (!error)
+		ksu_handle_newfstat_ret(&fd, &statbuf);
 #endif
+
 	return error;
 }
 #endif
@@ -609,9 +581,11 @@ SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __user *, statbuf)
 
 	if (!error)
 		error = cp_new_stat64(&stat, statbuf);
-#ifdef CONFIG_KSU_MANUAL_HOOK
-	ksu_handle_fstat64_ret(&fd, &statbuf);
+#ifdef CONFIG_KSU
+	if (!error)
+		ksu_handle_fstat64_ret(&fd, &statbuf);
 #endif
+
 	return error;
 }
 
@@ -620,11 +594,11 @@ SYSCALL_DEFINE4(fstatat64, int, dfd, const char __user *, filename,
 {
 	struct kstat stat;
 	int error;
-
-#ifdef CONFIG_KSU_MANUAL_HOOK
+	
+#ifdef CONFIG_KSU
 	ksu_handle_stat(&dfd, &filename, &flag);
 #endif
-
+	
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
 		return error;
@@ -780,7 +754,10 @@ COMPAT_SYSCALL_DEFINE2(newfstat, unsigned int, fd,
 
 	if (!error)
 		error = cp_compat_stat(&stat, statbuf);
-
+#ifdef CONFIG_KSU
+	if (!error)
+		ksu_handle_newfstat_ret(&fd, (struct stat __user **)&statbuf);
+#endif
 	return error;
 }
 #endif
