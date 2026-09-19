@@ -55,6 +55,7 @@ extern const struct qstr susfs_fake_qstr_name;
 #endif
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 extern struct filename *susfs_open_redirect_spoof_do_sys_openat(struct inode *inode);
+extern int susfs_open_redirect_spoof_vfs_readlink(struct inode *inode, char __user *buffer, int buflen);
 #endif
 
 
