@@ -41,6 +41,7 @@
 #include <linux/uaccess.h>
 #if defined(CONFIG_KSU_SUSFS_SUS_PATH) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 #include <linux/susfs_def.h>
+#include <uapi/linux/magic.h>
 #endif
 
 #include "internal.h"
@@ -54,7 +55,6 @@ extern bool susfs_is_inode_sus_path(struct inode *inode);
 extern const struct qstr susfs_fake_qstr_name;
 #endif
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
-extern struct filename *susfs_open_redirect_spoof_do_sys_openat(struct inode *inode);
 extern int susfs_open_redirect_spoof_vfs_readlink(struct inode *inode, char __user *buffer, int buflen);
 #endif
 
@@ -433,8 +433,9 @@ static int sb_permission(struct super_block *sb, struct inode *inode, int mask)
  * @mask: Right to check for (%MAY_READ, %MAY_WRITE, %MAY_EXEC)
  *
  * Check for read/write/execute permissions on an inode.  We use fs[ug]id for
- * this, letting us set arbitrary permissions for filesystem access without
- * changing the "normal" UIDs which are used for other things.
+ * this, letting us set arbitrary permissions
+ * for filesystem access without changing the "normal" UIDs which
+ * are used for other things.
  *
  * When checking for MAY_APPEND, MAY_WRITE must also be set in @mask.
  */
