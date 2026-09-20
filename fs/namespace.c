@@ -33,6 +33,7 @@
 #ifdef CONFIG_KSU_SUSFS
 #include <linux/susfs_def.h>
 #endif // #ifdef CONFIG_KSU_SUSFS
+
 #include "pnode.h"
 #include "internal.h"
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
