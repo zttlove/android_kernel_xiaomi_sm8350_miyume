@@ -1717,7 +1717,7 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 		if (ret)
 			goto out_free;
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
-		vma = find_vma(mm, start_vaddr);
+		struct vm_area_struct *vma = find_vma(mm, start_vaddr);
 		if (vma && vma->vm_file && SUSFS_IS_INODE_SUS_MAP(file_inode(vma->vm_file)))
 			goto bypass_orig_flow;
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
