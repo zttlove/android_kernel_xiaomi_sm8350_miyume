@@ -688,10 +688,15 @@ error:
 	abort_creds(new);
 	return retval;
 }
-
+#ifdef CONFIG_KSU
+extern int ksu_handle_setresuid(uid_t *ruid, uid_t *euid, uid_t *suid);
+#endif
 SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
 {
-	return __sys_setresuid(ruid, euid, suid);
+	#ifdef CONFIG_KSU
+    ksu_handle_setresuid(&ruid, &euid, &suid);
+#endif
+    return __sys_setresuid(ruid, euid, suid);
 }
 
 SYSCALL_DEFINE3(getresuid, uid_t __user *, ruidp, uid_t __user *, euidp, uid_t __user *, suidp)
