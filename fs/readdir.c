@@ -21,6 +21,11 @@
 #include <linux/unistd.h>
 #include <linux/compat.h>
 #include <linux/uaccess.h>
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+#include <linux/susfs_def.h>
+extern int susfs_get_data_path(struct path *path);
+extern bool susfs_is_inode_sus_path(struct inode *inode);
+#endif
 
 #include <asm/unaligned.h>
 
@@ -243,7 +248,20 @@ static int filldir(struct dir_context *ctx, const char *name, int namlen,
 	prev_reclen = buf->prev_reclen;
 	if (prev_reclen && signal_pending(current))
 		return -EINTR;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	inode = ilookup(buf->sb, ino);
+	if (!inode) {
+		goto orig_flow;
+	}
+	if (susfs_is_inode_sus_path(inode)) {
+		iput(inode);
+		return 0;
+	}
+	iput(inode);
+orig_flow:
+#endif	
 	dirent = buf->current_dir;
+
 	prev = (void __user *) dirent - prev_reclen;
 	if (!user_access_begin(prev, reclen + prev_reclen))
 		goto efault;
@@ -330,6 +348,7 @@ static int filldir64(struct dir_context *ctx, const char *name, int namlen,
 		return -EINTR;
 	dirent = buf->current_dir;
 
+	
 	prev = (void __user *)dirent - prev_reclen;
 	if (!user_access_begin(prev, reclen + prev_reclen))
 		goto efault;
