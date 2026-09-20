@@ -16,21 +16,21 @@ unsigned int sysctl_sched_min_task_util_for_colocation = 35;
 
 static void create_util_to_cost_pd(struct em_perf_domain *pd)
 {
-	int util, cpu = cpumask_first(to_cpumask(pd->cpus));
+	cpu = cpumask_first(to_cpumask(pd->cpus));   // ✅ cpu 在函数开头已声明
 	unsigned long fmax;
 	unsigned long scale_cpu;
 	struct rq *rq = cpu_rq(cpu);
 	struct walt_sched_cluster *cluster = rq->wrq.cluster;
 
-	fmax = (u64)pd->table[pd->nr_perf_states - 1].frequency;
+	fmax = (u64)pd->table[pd->nr_cap_states - 1].frequency;
 	scale_cpu = arch_scale_cpu_capacity(cpu);
 
 	for (util = 0; util < 1024; util++) {
 		int j;
 		int f = (fmax * util) / scale_cpu;
-		struct em_perf_state *ps = &pd->table[0];
+		struct em_cap_state *ps = &pd->table[0];
 
-		for (j = 0; j < pd->nr_perf_states; j++) {
+		for (j = 0; j < pd->nr_cap_states; j++) {
 			ps = &pd->table[j];
 			if (ps->frequency >= f)
 				break;
