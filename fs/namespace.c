@@ -31,8 +31,9 @@
 #include <linux/fs_context.h>
 #include <linux/shmem_fs.h>
 #ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
 #include <linux/susfs_def.h>
-#endif // #ifdef CONFIG_KSU_SUSFS
+#endif
 
 #include "pnode.h"
 #include "internal.h"
