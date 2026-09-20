@@ -16,7 +16,7 @@ unsigned int sysctl_sched_min_task_util_for_colocation = 35;
 
 static void create_util_to_cost_pd(struct em_perf_domain *pd)
 {
-	cpu = cpumask_first(to_cpumask(pd->cpus));   // ✅ cpu 在函数开头已声明
+	int util, cpu = cpumask_first(to_cpumask(pd->cpus));
 	unsigned long fmax;
 	unsigned long scale_cpu;
 	struct rq *rq = cpu_rq(cpu);
