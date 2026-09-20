@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
 #include <linux/version.h>
 #include <linux/cred.h>
 #include <linux/fs.h>
@@ -141,19 +140,8 @@ static void susfs_run_sus_path_loop(void) {
 	struct path path;
 	struct inode *inode;
 	struct fuse_inode *fi = NULL;
-	const struct cred *saved;
-	int srcu_idx;
-
-	/*
-	 * FIX: ksu_cred 可能在 KernelSU 初始化之前为 NULL，
-	 *      current->mm 在内核线程里也为 NULL。
-	 *      这两种情况都必须短路，否则 override_creds(NULL) 会崩溃。
-	 */
-	if (!ksu_cred || !current->mm)
-		return;
-
-	saved = override_creds(ksu_cred);
-	srcu_idx = srcu_read_lock(&susfs_srcu_sus_path_loop);
+	const struct cred *saved = override_creds(ksu_cred);
+	int srcu_idx = srcu_read_lock(&susfs_srcu_sus_path_loop);
 
 	list_for_each_entry_rcu(cursor, &LH_SUS_PATH_LOOP, list) {
 		if (!kern_path(cursor->target_pathname, 0, &path))
@@ -201,16 +189,6 @@ bool susfs_is_inode_sus_path(struct inode *inode)
 #endif
 {
 	struct fuse_inode *fi = NULL;
-
-	/*
-	 * FIX: early boot 时 current->mm == NULL，直接短路。
-	 *      同时 inode 可能为 NULL（负 dentry 传递），必须判空。
-	 */
-	if (!current->mm)
-		return false;
-	if (!inode || !inode->i_sb)
-		return false;
-
 	if (!susfs_is_current_proc_umounted_app()) {
 		return false;
 	}
@@ -541,6 +519,7 @@ void susfs_update_sus_kstat(void __user **user_info) {
 		}
 	}
 	mutex_unlock(&susfs_mutex_lock_sus_kstat);
+	kfree(new_entry);
 	info.err = -ENOENT;
 
 out_copy_to_user:
@@ -885,11 +864,17 @@ out_copy_to_user:
 
 void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m) {
 	unsigned seq;
+	char *buf = (char *)kmalloc(SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE, GFP_KERNEL);
 
+	if (!buf) {
+		return;
+	}
 	do {
 		seq = read_seqbegin(&susfs_fake_cmdline_or_bootconfig_seqlock);
-		seq_puts(m, fake_cmdline_or_bootconfig);
+		strscpy(buf, fake_cmdline_or_bootconfig, SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE);
 	} while (read_seqretry(&susfs_fake_cmdline_or_bootconfig_seqlock, seq));
+	seq_puts(m, buf);
+	kfree(buf);
 }
 #endif
 
@@ -1514,21 +1499,21 @@ static int add_mark_on_inode(struct inode *inode, u32 mask,
 
 static int susfs_sdcard_monitor_fn(void *data)
 {
+	struct cred *cred = prepare_creds();
 	int ret = 0;
 
-	/*
-	 * FIX:
-	 *   原来这里在内核线程里调用 prepare_creds()/setup_selinux()/commit_creds()，
-	 *   并且检查 susfs_is_current_ksu_domain()。这两个操作在内核线程上下文里
-	 *   都是不安全的：
-	 *     - current->mm == NULL
-	 *     - setup_selinux 需要 SELinux 已初始化
-	 *     - commit_creds 在没有 mm 的线程上可能触发 BUG
-	 *     - susfs_is_current_ksu_domain() 在内核线程里恒为 false，线程会立即退出
-	 *
-	 *   直接删除这些操作，只做 fsnotify 监控。
-	 *   SELinux 域切换由调用方（KernelSU 用户态）负责。
-	 */
+	if (!cred) {
+		SUSFS_LOGE("failed to prepare creds!\n");
+		return -ENOMEM;
+	}
+
+	setup_selinux("u:r:ksu:s0", cred);
+	commit_creds(cred);
+
+	if (!susfs_is_current_ksu_domain()) {
+		SUSFS_LOGE("domain is not ksu, exiting the thread\n");
+		return -EINVAL;
+	}
 
 	SUSFS_LOGI("start monitoring path '%s' using fsnotify\n",
 				SDCARD_ANDROID_PATH);
@@ -1572,7 +1557,7 @@ static void susfs_run_extra_works(struct work_struct *work) {
 }
 
 /* susfs_init */
-void susfs_init(void) {
+void susfs_init(void) {\
 	SUSFS_LOGI("Initializing susfs_extra_works\n");
 	INIT_WORK(&susfs_extra_works, susfs_run_extra_works);
 	SUSFS_LOGI("susfs is initialized! version: " SUSFS_VERSION " \n");
@@ -1580,3 +1565,4 @@ void susfs_init(void) {
 
 /* No module exit is needed becuase it should never be a loadable kernel module */
 //void __init susfs_exit(void)
+
