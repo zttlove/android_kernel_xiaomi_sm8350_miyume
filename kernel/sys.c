@@ -1245,7 +1245,6 @@ static int override_release(char __user *release, size_t len)
 SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {
 	struct new_utsname tmp;
-
 	down_read(&uts_sem);
 	memcpy(&tmp, utsname(), sizeof(tmp));
 	/*
@@ -1260,6 +1259,10 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 		strscpy(tmp.release, "5.10.199-dsu-bpf-compat",
 			sizeof(tmp.release));
 	}
+#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+	if (static_branch_likely(&susfs_is_uname_spoof_buffer_set))
+		susfs_spoof_uname(&tmp);
+#endif
 	up_read(&uts_sem);
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
